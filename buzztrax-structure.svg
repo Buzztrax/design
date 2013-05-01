@@ -15,8 +15,8 @@
    id="svg2"
    version="1.1"
    inkscape:version="0.47 r22583"
-   sodipodi:docname="buzztard-structure.svg"
-   inkscape:export-filename="/home/ensonic/projects/buzztard/buzztard/design/buzztard-structure.png"
+   sodipodi:docname="buzztrax-structure.svg"
+   inkscape:export-filename="/home/ensonic/projects/buzztrax/buzztrax/design/buzztrax-structure.png"
    inkscape:export-xdpi="60"
    inkscape:export-ydpi="60">
   <defs
@@ -932,21 +932,21 @@
            ry="14.233617" />
       </g>
       <image
-         xlink:href="file:///home/ensonic/projects/buzztard/buzztard/design/machine-properties.png"
+         xlink:href="file:///home/ensonic/projects/buzztrax/buzztrax/design/machine-properties.png"
          width="180"
          height="138.87418"
          id="image4035"
          x="145.37924"
          y="531.29639" />
       <image
-         xlink:href="file:///home/ensonic/projects/buzztard/buzztard/design/main-page-machines.png"
+         xlink:href="file:///home/ensonic/projects/buzztrax/buzztrax/design/main-page-machines.png"
          width="300"
          height="236.4754"
          id="image4063"
          x="376.29047"
          y="433.69513" />
       <image
-         xlink:href="file:///home/ensonic/projects/buzztard/buzztard/design/main-page-sequence.png"
+         xlink:href="file:///home/ensonic/projects/buzztrax/buzztrax/design/main-page-sequence.png"
          width="300"
          height="236.4754"
          id="image4091"
@@ -988,7 +988,7 @@
          d="m 414.19965,238.87146 -81.65951,62.34081"
          style="fill:none;stroke:#ff0000;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1" />
       <image
-         xlink:href="file:///home/ensonic/projects/buzztard/buzztard/design/main-page-patterns.png"
+         xlink:href="file:///home/ensonic/projects/buzztrax/buzztrax/design/main-page-patterns.png"
          width="300"
          height="236.4754"
          id="image4077"
@@ -1059,7 +1059,7 @@
          style="fill:none;stroke:#ff0000;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1" />
       <image
          style="fill-rule:nonzero"
-         xlink:href="file:///home/ensonic/projects/buzztard/buzztard/design/record.png"
+         xlink:href="file:///home/ensonic/projects/buzztrax/buzztrax/design/record.png"
          width="180"
          height="121.45329"
          id="image4105"
@@ -1149,7 +1149,7 @@
              style="font-size:14px">Melo 3.ogg</tspan></text>
       </g>
       <image
-         xlink:href="file:///home/ensonic/projects/buzztard/buzztard/design/main-page-info.png"
+         xlink:href="file:///home/ensonic/projects/buzztrax/buzztrax/design/main-page-info.png"
          width="300"
          height="236.4754"
          id="image4049"
@@ -1267,7 +1267,7 @@
          y="353.1272"
          style="font-size:48px;font-weight:bold;fill:#000000;fill-opacity:0.31972788;font-family:sans"><tspan
            style="font-size:56px"
-           id="tspan20175">buzztard</tspan><tspan
+           id="tspan20175">buzztrax</tspan><tspan
            style="font-weight:normal"
            id="tspan20173"> structure</tspan></tspan></text>
   </g>
