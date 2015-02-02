@@ -3,6 +3,7 @@ acceltoolbar
 accelpopup
 canvas-redraw
 clutter*
+gtkxvfb
 minibutton
 svgcanvas
 levelmeter
@@ -11,5 +12,4 @@ scalemarkers*
 stylecolors*
 svgcanvasitem
 svgcanvas2
-
 syncviews
