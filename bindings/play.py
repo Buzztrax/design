@@ -1,19 +1,30 @@
 # http://live.gnome.org/GObjectIntrospection
-# cd /home/ensonic/projects/pybank
-# GI_TYPELIB_PATH=/home/ensonic/buzztrax/lib/girepository PYTHONPATH=$PWD python ~/projects/buzztrax/buzztrax/design/bindings/play.py
-#
+# GI_TYPELIB_PATH=$HOME/buzztrax/lib/girepository-1.0 python play.py
 
-import bank
-import GLib
-import BuzztraxCore
+from gi.repository import GLib
+from gi.repository import BuzztraxCore
 
-GLib.thread_init(None);
-BuzztraxCore.init(0,None)
+BuzztraxCore.init(None)
+loop = GLib.MainLoop()
 
-app=BuzztraxCore.Application()
-# bin=app.get("bin")
-#song=BuzztraxCore.Song(app=app)
-song=BuzztraxCore.Song(app)
-songio=BuzztraxCore.SongIO.make("/home/ensonic/buzztrax/share/buzztrax/songs/melo3.xml")
+# BuzztraxCore.Application is a abstract base class
+class Player(BuzztraxCore.Application):
+  def __init__(self):
+    BuzztraxCore.Application.__init__(self)
+
+def isPlaying(self, x):
+  if not self.get_property("is-playing"):
+      print("stop playing")
+      loop.quit()
+  else:
+      print("start playing")
+
+app=Player()
+song=BuzztraxCore.Song(app=app)
+songio=BuzztraxCore.SongIO.from_file("/home/ensonic/buzztrax/share/buzztrax/songs/melo3.xml")
 songio.load(song)
+song.play()
 
+song.connect("notify::is-playing", isPlaying)
+
+loop.run()
