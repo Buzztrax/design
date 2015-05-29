@@ -1,6 +1,8 @@
 /* test gtk_init with custom display
  *
  * gcc -Wall -g gtkxvfb.c -o gtkxvfb `pkg-config gtk+-3.0 --cflags --libs`
+ *
+ * See https://bugzilla.gnome.org/show_bug.cgi?id=749752
  */
 
 #include <stdlib.h>
@@ -8,6 +10,9 @@
 #include <gdk/gdk.h>
 #include <glib.h>
 #include <glib/gstdio.h>
+
+#include <sys/types.h>
+#include <sys/wait.h>
 
 static GPid server_pid;
 static GdkDisplayManager *display_manager = NULL;
@@ -30,7 +35,7 @@ __test_server_watch (GPid pid, gint status, gpointer data)
   server_pid = 0;
 }
 
-void
+static void
 check_setup_test_server (void)
 {
   //gulong flags=G_SPAWN_SEARCH_PATH|G_SPAWN_STDOUT_TO_DEV_NULL|G_SPAWN_STDERR_TO_DEV_NULL;
@@ -161,7 +166,7 @@ check_setup_test_server (void)
   }
 }
 
-void
+static void
 check_setup_test_display (void)
 {
   if (display_number > -1) {
@@ -228,7 +233,7 @@ check_setup_test_display (void)
   }
 }
 
-void
+static void
 check_shutdown_test_display (void)
 {
   if (test_display) {
@@ -260,13 +265,13 @@ check_shutdown_test_display (void)
   }
 }
 
-void
+static void
 check_shutdown_test_server (void)
 {
   if (server_pid) {
     guint wait_count = 5;
     wait_for_server = TRUE;
-    fprintf (stderr, "shuting down test server\n");
+    fprintf (stderr, "shutting down test server\n");
 
     // kill the testing server - TODO(ensonic): try other signals (SIGQUIT, SIGTERM).
     kill (server_pid, SIGINT);
@@ -282,21 +287,78 @@ check_shutdown_test_server (void)
   }
 }
 
+static void
+flush_main_loop (void)
+{
+  GMainContext *ctx = g_main_context_default ();
+
+  fprintf (stderr, "flushing pending events ...\n");
+  while (g_main_context_pending (ctx))
+    g_main_context_iteration (ctx, FALSE);
+  fprintf (stderr, "... done\n");
+}
+
+static void
+save_screenshot (GtkWidget * widget)
+{
+  GdkWindow *window = gtk_widget_get_window (widget);
+  GdkPixbuf *pixbuf;
+  gint ww, wh;
+  cairo_surface_t *surface;
+  cairo_t *cr;
+
+  // make sure the window gets drawn
+  if (!gtk_widget_get_visible (widget)) {
+    gtk_widget_show_all (widget);
+  }
+  if (GTK_IS_WINDOW (widget)) {
+    gtk_window_present (GTK_WINDOW (widget));
+  }
+  gtk_widget_queue_draw (widget);
+  flush_main_loop ();
+
+  gdk_window_get_geometry (window, NULL, NULL, &ww, &wh);
+  pixbuf = gdk_pixbuf_get_from_window (window, 0, 0, ww, wh);
+
+  surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, ww, wh);
+  cr = cairo_create (surface);
+  gdk_cairo_set_source_pixbuf (cr, pixbuf, 0, 0);
+  cairo_paint (cr);
+  cairo_surface_write_to_png (surface, "gtkxvfb.png");
+}
+
 gint
 main (gint argc, gchar * argv[])
 {
   GtkWidget *window;
 
   check_setup_test_server ();
-  gdk_init (&argc, &argv);
-  check_setup_test_display ();
-  gtk_init (&argc, &argv);
   
-  window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
-  gtk_widget_show_all (window);
-  g_usleep (G_USEC_PER_SEC);
-  
-  check_shutdown_test_display ();
-  check_shutdown_test_server ();
+  gint pid = fork ();
+  if (pid == 0) {
+    fprintf (stderr,"child started\n");
+    /*child*/
+    gdk_init (&argc, &argv);
+    check_setup_test_display ();
+    gtk_init (&argc, &argv);
+    fprintf (stderr,"child init done\n");
+
+    if ((window = gtk_window_new (GTK_WINDOW_TOPLEVEL))) {
+      gtk_container_add (GTK_CONTAINER (window), gtk_label_new ("hello"));
+      gtk_widget_show_all (window);
+      fprintf (stderr,"window created and showing\n");
+      save_screenshot (window);
+      g_usleep (G_USEC_PER_SEC);
+      fprintf (stderr,"child stopping\n");
+      gtk_widget_destroy (window);
+      fprintf (stderr,"window closed\n");
+    } else {
+      fprintf (stderr,"child could not open window\n");
+    }
+    check_shutdown_test_display ();
+  } else if (pid > 0) {
+    waitpid (pid, NULL, 0);
+    check_shutdown_test_server ();
+  }
   return 0;
 }
