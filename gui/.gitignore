@@ -3,8 +3,10 @@ acceltoolbar
 accelpopup
 canvas-redraw
 clutter*
+gtkcanvas
 gtkxvfb
 minibutton
+multiscreen
 svgcanvas
 levelmeter
 notebook
@@ -14,3 +16,4 @@ svgcanvasitem
 svgcanvas2
 syncviews
 toolbutton
+volumebutton
