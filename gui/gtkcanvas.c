@@ -3,12 +3,17 @@
  *
  * gcc -Wall -g gtkcanvas.c -o gtkcanvas `pkg-config gtk+-3.0 --cflags  --libs`
  *
+ * DONE:
+ * - draw background
+ * - add widgtes
+ *
  * TODO:
- * - add background grid
  * - make widgets movable
- * - add wires (drawable?)
+ * - add connecting wires (drawable?)
  * - figure out how to manage z-order
  * - add image effects (transparency, shading)
+ * - zoom
+ * - gravity center for GtkLayout
  */
 
 #include <gtk/gtk.h>
@@ -16,14 +21,112 @@
 #define WIDTH 320
 #define HEIGHT 240
 
+static GtkIconTheme *it = NULL;
+static GtkWidget *canvas = NULL;
+static gboolean drag = FALSE;
+static gdouble mxs = 0.0, mys = 0.0;
+static gint cxs = 0, cys = 0;
+
+static gboolean
+on_canvas_draw (GtkWidget * widget, cairo_t * cr, gpointer user_data)
+{
+  GtkStyleContext *style_ctx;
+  guint width, height;
+  guint xpos, ypos;
+
+  gtk_layout_get_size (GTK_LAYOUT (widget), &width, &height);
+  xpos = gtk_adjustment_get_value (gtk_scrollable_get_hadjustment (GTK_SCROLLABLE (widget)));
+  ypos = gtk_adjustment_get_value (gtk_scrollable_get_vadjustment (GTK_SCROLLABLE (widget)));
+  style_ctx = gtk_widget_get_style_context (widget);
+
+  /* draw border */
+  gtk_render_background (style_ctx, cr, 0, 0, width, height);
+  gtk_render_frame (style_ctx, cr, 0, 0, width, height);
+
+  cairo_set_source_rgb (cr, 0.0, 0.0, 0.0);
+  cairo_rectangle (cr, -xpos, -ypos, width, height);
+  cairo_stroke (cr);
+
+  cairo_move_to (cr, -xpos, -ypos);
+  cairo_line_to (cr, width-xpos, height-ypos);
+  cairo_stroke (cr);
+
+  cairo_move_to (cr, width-xpos, -ypos);
+  cairo_line_to (cr, -xpos, height-ypos);
+  cairo_stroke (cr);
+
+  return FALSE; // continue to draw
+}
+
+static gboolean
+on_machine_button_press_event (GtkWidget * widget, GdkEventButton * event,
+    gpointer user_data)
+{
+  if (event->button == GDK_BUTTON_PRIMARY && event->type == GDK_BUTTON_PRESS) {
+    drag = TRUE;
+    mxs = event->x;
+    mys = event->y;
+    gtk_container_child_get (GTK_CONTAINER (canvas), widget, "x", &cxs, "y", &cys, NULL);
+    printf("mouse button down: %8.3lf,%8.3lf,  machine at: %d,%d\n",
+      event->x, event->y, cxs, cys);
+  }
+  return FALSE;
+}
+
+static gboolean
+on_machine_motion_notify_event (GtkWidget * widget,
+    GdkEventMotion * event, gpointer user_data)
+{
+  if (!drag)
+    return TRUE;
+
+  gdouble mxd = event->x - mxs, myd = event->y - mys;
+  gtk_layout_move (GTK_LAYOUT (canvas), widget, cxs + mxd, cys + myd);
+  // FIXME: why does this jitter?
+  printf("mouse drag: %8.3lf,%8.3lf, delta: %8.3lf,%8.3lf, machine to: %d,%d\n",
+    event->x, event->y, mxd, myd, (gint)(cxs + mxd), (gint)(cys + myd));
+
+  return FALSE;
+}
+
+static gboolean
+on_machine_button_release_event (GtkWidget * widget, GdkEventButton * event,
+    gpointer user_data)
+{
+  if (event->button == GDK_BUTTON_PRIMARY && event->type == GDK_BUTTON_RELEASE) {
+    drag = FALSE;
+    printf("mouse button up\n");
+  }
+  return FALSE;
+}
+
+GtkWidget *
+make_machine (const char *name)
+{
+  GtkWidget *image = gtk_image_new_from_pixbuf (gtk_icon_theme_load_icon (it,
+      name, 64,
+      GTK_ICON_LOOKUP_FORCE_SVG | GTK_ICON_LOOKUP_FORCE_SIZE, NULL));
+
+  GtkWidget *event_box = gtk_event_box_new ();
+  gtk_container_add (GTK_CONTAINER (event_box), image);
+
+  gtk_widget_add_events (event_box, GDK_BUTTON1_MOTION_MASK);
+
+  g_signal_connect (event_box, "button-press-event",
+      G_CALLBACK (on_machine_button_press_event), NULL);
+  g_signal_connect (event_box, "button-release-event",
+      G_CALLBACK (on_machine_button_release_event), NULL);
+  g_signal_connect (event_box, "motion-notify-event",
+      G_CALLBACK (on_machine_motion_notify_event), NULL);
+  return event_box;
+}
+
 gint
 main (gint argc, gchar * argv[])
 {
   GtkWidget *window = NULL;
   GtkWidget *scrolled_window = NULL;
-  GtkWidget *canvas;
   GtkWidget *child1, *child2;
-  GtkIconTheme *it = NULL;
 
   gtk_init (&argc, &argv);
 
@@ -38,19 +141,20 @@ main (gint argc, gchar * argv[])
   gtk_container_add (GTK_CONTAINER (window), scrolled_window);
   gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled_window),
       GTK_POLICY_ALWAYS, GTK_POLICY_ALWAYS);
+  // make child centered if scrolled window is larger
+  // gtk_alignment_set (GTK_ALIGNMENT (xxx), 0.5, 0.5, 0.0, 0.0);
 
   canvas = gtk_layout_new (NULL, NULL);
   gtk_container_add (GTK_CONTAINER (scrolled_window), canvas);
   gtk_layout_set_size (GTK_LAYOUT (canvas), WIDTH, HEIGHT);
   gtk_scrolled_window_set_min_content_width (GTK_SCROLLED_WINDOW (scrolled_window), WIDTH/2);
   gtk_scrolled_window_set_min_content_height (GTK_SCROLLED_WINDOW (scrolled_window), HEIGHT/2);
+  g_signal_connect (canvas, "draw", G_CALLBACK (on_canvas_draw), NULL);
 
-  child1 = gtk_button_new_with_label ("Hello");
+  child1 = make_machine (/*"buzztrax_master"*/ "zoom-in");
   gtk_layout_put (GTK_LAYOUT (canvas), child1, WIDTH/2, HEIGHT/2);
 
-  child2 = gtk_image_new_from_pixbuf (gtk_icon_theme_load_icon (it,
-      "buzztrax_generator", 64,
-      GTK_ICON_LOOKUP_FORCE_SVG | GTK_ICON_LOOKUP_FORCE_SIZE, NULL));
+  child2 = make_machine (/*"buzztrax_generator"*/ "zoom-out");
   gtk_layout_put (GTK_LAYOUT (canvas), child2, WIDTH/4, HEIGHT/4);
 
   gtk_widget_show_all (window);
