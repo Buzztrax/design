@@ -4,13 +4,16 @@
  * gcc -Wall -g gtkcanvas.c -o gtkcanvas `pkg-config gtk+-3.0 --cflags  --libs`
  *
  * DONE:
- * - draw background
- * - add widgtes
+ * - draw background (with scrolling support)
+ * - add widgets
+ * - make widgets movable
+ *
+ * HACK:
+ * - figure out how to manage z-order
+ *   - remove and add move a widget to top
  *
  * TODO:
- * - make widgets movable
  * - add connecting wires (drawable?)
- * - figure out how to manage z-order
  * - add image effects (transparency, shading)
  * - zoom
  * - gravity center for GtkLayout
@@ -43,6 +46,7 @@ on_canvas_draw (GtkWidget * widget, cairo_t * cr, gpointer user_data)
   gtk_render_background (style_ctx, cr, 0, 0, width, height);
   gtk_render_frame (style_ctx, cr, 0, 0, width, height);
 
+  /* draw a box + cross, offset by xpos/ypos to support scrolling */
   cairo_set_source_rgb (cr, 0.0, 0.0, 0.0);
   cairo_rectangle (cr, -xpos, -ypos, width, height);
   cairo_stroke (cr);
@@ -64,11 +68,12 @@ on_machine_button_press_event (GtkWidget * widget, GdkEventButton * event,
 {
   if (event->button == GDK_BUTTON_PRIMARY && event->type == GDK_BUTTON_PRESS) {
     drag = TRUE;
-    mxs = event->x;
-    mys = event->y;
+    mxs = event->x_root;
+    mys = event->y_root;
     gtk_container_child_get (GTK_CONTAINER (canvas), widget, "x", &cxs, "y", &cys, NULL);
-    printf("mouse button down: %8.3lf,%8.3lf,  machine at: %d,%d\n",
-      event->x, event->y, cxs, cys);
+    // move child to top, hack?
+    gtk_container_remove (GTK_CONTAINER (canvas), widget);
+    gtk_layout_put (GTK_LAYOUT (canvas), widget, cxs, cys);
   }
   return FALSE;
 }
@@ -80,12 +85,8 @@ on_machine_motion_notify_event (GtkWidget * widget,
   if (!drag)
     return TRUE;
 
-  gdouble mxd = event->x - mxs, myd = event->y - mys;
+  gdouble mxd = event->x_root - mxs, myd = event->y_root - mys;
   gtk_layout_move (GTK_LAYOUT (canvas), widget, cxs + mxd, cys + myd);
-  // FIXME: why does this jitter?
-  printf("mouse drag: %8.3lf,%8.3lf, delta: %8.3lf,%8.3lf, machine to: %d,%d\n",
-    event->x, event->y, mxd, myd, (gint)(cxs + mxd), (gint)(cys + myd));
-
   return FALSE;
 }
 
@@ -95,7 +96,6 @@ on_machine_button_release_event (GtkWidget * widget, GdkEventButton * event,
 {
   if (event->button == GDK_BUTTON_PRIMARY && event->type == GDK_BUTTON_RELEASE) {
     drag = FALSE;
-    printf("mouse button up\n");
   }
   return FALSE;
 }
