@@ -1,6 +1,6 @@
 /* port waveform-viewer to gtk3
  *
- * gcc -Wall -g -I. wave.c waveform-viewer.c -o wave -lm `pkg-config gtk+-3.0 --cflags --libs`
+ * gcc -Wall -g -I. wave.c waveform-viewer.c -o wave -lm `pkg-config gtk+-3.0 --cflags --libs` -DDATADIR=\"$HOME/buzztrax/share\"
  */
 
 #include <math.h>
@@ -32,6 +32,15 @@ main (gint argc, gchar ** argv)
 
   gtk_init (&argc, &argv);
 
+  /* style init */
+  GtkStyleProvider *provider = (GtkStyleProvider *) gtk_css_provider_new ();
+  gtk_style_context_add_provider_for_screen (gdk_screen_get_default (),
+      provider, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+  gtk_css_provider_load_from_path (GTK_CSS_PROVIDER (provider),
+      DATADIR "" G_DIR_SEPARATOR_S "buzztrax" G_DIR_SEPARATOR_S "bt-edit.light.normal.css",
+      NULL);
+
+  /* wave data */
   for (i = 0; i < DATA_SIZE; i++) {
     f = (gdouble) i;
     v = 32767.0 * (1.0 - (f / DATA_SIZE)) * sin (f / 50.0);

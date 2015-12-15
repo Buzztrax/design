@@ -55,10 +55,10 @@ enum
   PROP_ORIENTATION
 };
 
-#define MIN_HORIZONTAL_VUMETER_WIDTH   150
+#define MIN_HORIZONTAL_VUMETER_WIDTH   30
 #define HORIZONTAL_VUMETER_HEIGHT  6
 #define VERTICAL_VUMETER_WIDTH     6
-#define MIN_VERTICAL_VUMETER_HEIGHT    400
+#define MIN_VERTICAL_VUMETER_HEIGHT    30
 #define LED_SIZE 5
 
 static void gtk_vumeter_set_property (GObject * object, guint prop_id,
@@ -111,6 +111,7 @@ gtk_vumeter_init (GtkVUMeter * self)
 
   context = gtk_widget_get_style_context (GTK_WIDGET (self));
   gtk_style_context_add_class (context, GTK_STYLE_CLASS_FRAME);
+  gtk_style_context_add_class (context, GTK_STYLE_CLASS_TROUGH);
 
   gtk_widget_set_has_window (GTK_WIDGET (self), FALSE);
 }
@@ -187,6 +188,7 @@ gtk_vumeter_allocate_colors (GtkVUMeter * self)
 {
   cairo_pattern_t *gradient;
   gint width, height;
+  gdouble pos[3];
 
   /* free old gradients */
   if (self->gradient_rms)
@@ -199,28 +201,34 @@ gtk_vumeter_allocate_colors (GtkVUMeter * self)
   if (self->orientation == GTK_ORIENTATION_VERTICAL) {
     height = gtk_widget_get_allocated_height ((GtkWidget *) self) - 1;
     width = 1;
+    pos[0] = 1.0;
+    pos[1] = 0.7;
+    pos[2] = 0.0;
   } else {
     height = 1;
     width = gtk_widget_get_allocated_width ((GtkWidget *) self) - 1;
+    pos[0] = 0.0;
+    pos[1] = 0.7;
+    pos[2] = 1.0;
   }
 
   /* setup gradients */
   gradient = cairo_pattern_create_linear (1, 1, width, height);
-  cairo_pattern_add_color_stop_rgb (gradient, 0.0, 0.0, 1.0, 0.0);
-  cairo_pattern_add_color_stop_rgb (gradient, 0.7, 1.0, 1.0, 0.0);
-  cairo_pattern_add_color_stop_rgb (gradient, 1.0, 1.0, 0.0, 0.0);
+  cairo_pattern_add_color_stop_rgb (gradient, pos[0], 0.0, 1.0, 0.0);
+  cairo_pattern_add_color_stop_rgb (gradient, pos[1], 1.0, 1.0, 0.0);
+  cairo_pattern_add_color_stop_rgb (gradient, pos[2], 1.0, 0.0, 0.0);
   self->gradient_rms = gradient;
 
   gradient = cairo_pattern_create_linear (1, 1, width, height);
-  cairo_pattern_add_color_stop_rgb (gradient, 0.0, 0.0, 0.6, 0.0);
-  cairo_pattern_add_color_stop_rgb (gradient, 0.7, 0.6, 0.6, 0.0);
-  cairo_pattern_add_color_stop_rgb (gradient, 1.0, 0.6, 0.0, 0.0);
+  cairo_pattern_add_color_stop_rgb (gradient, pos[0], 0.0, 0.6, 0.0);
+  cairo_pattern_add_color_stop_rgb (gradient, pos[1], 0.6, 0.6, 0.0);
+  cairo_pattern_add_color_stop_rgb (gradient, pos[2], 0.6, 0.0, 0.0);
   self->gradient_peak = gradient;
 
   gradient = cairo_pattern_create_linear (1, 1, width, height);
-  cairo_pattern_add_color_stop_rgb (gradient, 0.0, 0.0, 0.3, 0.0);
-  cairo_pattern_add_color_stop_rgb (gradient, 0.7, 0.3, 0.3, 0.0);
-  cairo_pattern_add_color_stop_rgb (gradient, 1.0, 0.3, 0.0, 0.0);
+  cairo_pattern_add_color_stop_rgb (gradient, pos[0], 0.0, 0.3, 0.0);
+  cairo_pattern_add_color_stop_rgb (gradient, pos[1], 0.3, 0.3, 0.0);
+  cairo_pattern_add_color_stop_rgb (gradient, pos[2], 0.3, 0.0, 0.0);
   self->gradient_bg = gradient;
 }
 
@@ -303,6 +311,8 @@ gtk_vumeter_draw (GtkWidget * widget, cairo_t * cr)
   height -= self->border.top + self->border.bottom;
 
   if (self->orientation == GTK_ORIENTATION_VERTICAL) {
+    gdouble bottom = top + height;
+
     rms_level = LED_SIZE * (gtk_vumeter_sound_level_to_draw_level (self,
             self->rms_level, height) / LED_SIZE);
     peak_level = LED_SIZE * (gtk_vumeter_sound_level_to_draw_level (self,
@@ -310,13 +320,13 @@ gtk_vumeter_draw (GtkWidget * widget, cairo_t * cr)
 
     /* draw normal level */
     cairo_set_source (cr, self->gradient_rms);
-    cairo_rectangle (cr, left, top, width, rms_level);
+    cairo_rectangle (cr, left, bottom - rms_level, width, rms_level);
     cairo_fill (cr);
 
     /* draw peak */
     if (peak_level > rms_level) {
       cairo_set_source (cr, self->gradient_peak);
-      cairo_rectangle (cr, left, top + rms_level, width,
+      cairo_rectangle (cr, left, bottom - peak_level, width,
           peak_level - rms_level);
       cairo_fill (cr);
     }
@@ -324,7 +334,7 @@ gtk_vumeter_draw (GtkWidget * widget, cairo_t * cr)
     /* draw background for the rest */
     if (height > peak_level) {
       cairo_set_source (cr, self->gradient_bg);
-      cairo_rectangle (cr, left, top + peak_level, width, height - peak_level);
+      cairo_rectangle (cr, left, top, width, height - peak_level);
       cairo_fill (cr);
     }
 
@@ -387,7 +397,7 @@ gtk_vumeter_size_allocate (GtkWidget * widget, GtkAllocation * allocation)
 
   context = gtk_widget_get_style_context (widget);
   state = gtk_widget_get_state_flags (widget);
-  gtk_style_context_get_padding (context, state, &self->border);
+  gtk_style_context_get_border (context, state, &self->border);
 
   gtk_vumeter_allocate_colors (self);
 }

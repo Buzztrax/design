@@ -160,15 +160,13 @@ struct _BtPatternEditor {
   guint cw, ch;
   guint rowhdr_width, colhdr_height;
 
-  gboolean size_changed;
-
   /* current octave number */
   guint octave;
 
   /* position of playing pointer from 0.0 ... 1.0 */
   gdouble play_pos;
   /* own colors */
-  GdkRGBA play_pos_color, text_color, bg_color, sel_color, cursor_color;
+  GdkRGBA play_pos_color, text_color, sel_color, cursor_color;
   GdkRGBA bg_shade_color[2], value_color[2];
 
   /* scroll adjustments */
@@ -187,15 +185,14 @@ struct _BtPatternEditorClass {
 
 /* note: does not copy the BtPatternEditorColumn * data (in this version) */
 void bt_pattern_editor_set_pattern (BtPatternEditor *self,
-                          gpointer pattern_data,
-                          guint num_rows,
-                          guint num_groups,
-                          BtPatternEditorColumnGroup *groups,
-                          BtPatternEditorCallbacks *cb);
+    gpointer pattern_data, guint num_rows, guint num_groups,
+    BtPatternEditorColumnGroup *groups, BtPatternEditorCallbacks *cb);
 
 gboolean bt_pattern_editor_get_selection (BtPatternEditor *self,
-                                          gint *start, gint *end,
-                                          gint *group, gint *param);
+    gint *start, gint *end, gint *group, gint *param);
+
+gboolean bt_pattern_editor_position_to_coords (BtPatternEditor * self, 
+    gint x, gint y, gint * row, gint * group, gint * parameter, gint * digit);
 
 GtkWidget *bt_pattern_editor_new (void);
 

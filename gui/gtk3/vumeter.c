@@ -1,6 +1,6 @@
 /* port gtkvumeter to gtk3
  *
- * gcc -Wall -g -I. vumeter.c gtkvumeter.c -o vumeter `pkg-config gtk+-3.0 --cflags --libs`
+ * gcc -Wall -g -I. vumeter.c gtkvumeter.c -o vumeter -lm `pkg-config gtk+-3.0 --cflags --libs`
  */
 
 #include <gtk/gtk.h>
