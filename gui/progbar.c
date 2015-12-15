@@ -4,6 +4,8 @@
  *
  * The progressbar is supposed to be full height. This is the case in gtk+3.10.8
  * but not in 3.14.15.
+ *
+ * Changed in 74405cc. Only "solution" seems to center the widget.
  */
 
 #include <gtk/gtk.h>
@@ -17,7 +19,7 @@ main (gint argc, gchar * argv[])
   gtk_init (&argc, &argv);
 
   window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
-  gtk_window_set_title (GTK_WINDOW (window), "toolbar buttons vs toolbar styles");
+  gtk_window_set_title (GTK_WINDOW (window), "horizontal progress bar layout");
   g_signal_connect (G_OBJECT (window), "destroy", G_CALLBACK (gtk_main_quit),
       NULL);
 
