@@ -7,16 +7,21 @@
  * - draw background (with scrolling support)
  * - add widgets
  * - make widgets movable
- *
- * HACK:
- * - figure out how to manage z-order
- *   - remove and add move a widget to top
+ * - manage z-order (by drawing children ourself)
  *
  * TODO:
+ * - manage z-order
+ *   - we probbaly have to find a way to reorder the children list, since this
+ *     is also used for events => we should just copy the GtkLayout code
  * - add connecting wires (drawable?)
+ *   - rotation (via css? or gdk_pixbuf_rotate_simple())
  * - add image effects (transparency, shading)
+ *   - gtk_image_get_pixbuf
  * - zoom
  * - gravity center for GtkLayout
+ *
+ * GTK-3.12:
+ * - use gdk_window_set_event_compression(window)
  */
 
 #include <gtk/gtk.h>
@@ -26,7 +31,8 @@
 
 static GtkIconTheme *it = NULL;
 static GtkWidget *canvas = NULL;
-static gboolean drag = FALSE;
+static GtkWidget *drag = NULL;
+static GtkWidget *icon_s, *icon_e;
 static gdouble mxs = 0.0, mys = 0.0;
 static gint cxs = 0, cys = 0;
 
@@ -34,6 +40,8 @@ static gboolean
 on_canvas_draw (GtkWidget * widget, cairo_t * cr, gpointer user_data)
 {
   GtkStyleContext *style_ctx;
+  GtkWidget *child;
+  GList *list, *node, *listm = NULL;
   guint width, height;
   guint xpos, ypos;
 
@@ -47,7 +55,7 @@ on_canvas_draw (GtkWidget * widget, cairo_t * cr, gpointer user_data)
   gtk_render_frame (style_ctx, cr, 0, 0, width, height);
 
   /* draw a box + cross, offset by xpos/ypos to support scrolling */
-  cairo_set_source_rgb (cr, 0.0, 0.0, 0.0);
+  cairo_set_source_rgb (cr, 0.5, 0.5, 0.5);
   cairo_rectangle (cr, -xpos, -ypos, width, height);
   cairo_stroke (cr);
 
@@ -59,21 +67,55 @@ on_canvas_draw (GtkWidget * widget, cairo_t * cr, gpointer user_data)
   cairo_line_to (cr, -xpos, height-ypos);
   cairo_stroke (cr);
 
-  return FALSE; // continue to draw
+  /* z-order redraw: wires, machines, moving machine */
+  list = gtk_container_get_children ((GtkContainer *)widget);
+  for (node = list; node; node = g_list_next (node)) {
+    child = node->data;
+    if (GTK_IS_EVENT_BOX (child)) {
+      listm = g_list_prepend (listm, child);
+    } else {
+      gtk_container_propagate_draw ((GtkContainer *)widget, child, cr);
+    }
+  }
+  g_list_free (list);
+  for (node = listm; node; node = g_list_next (node)) {
+    child = node->data;
+    if (G_UNLIKELY (child == drag)) continue;
+    gtk_container_propagate_draw ((GtkContainer *)widget, child, cr);
+  }
+  g_list_free (listm);
+  if (drag) {
+    gtk_container_propagate_draw ((GtkContainer *)widget, drag, cr);
+  }
+  return TRUE; // we're done
 }
+
+static gboolean
+on_wire_draw (GtkWidget * widget, cairo_t * cr, gpointer user_data)
+{
+  guint width, height;
+
+  width = gtk_widget_get_allocated_width (widget);
+  height = gtk_widget_get_allocated_height (widget);
+
+  // FIXME: this should be a line
+  cairo_set_source_rgb (cr, 0.0, 0.0, 0.0);
+  cairo_rectangle (cr, 0.0, 0.0, width, height);
+  cairo_stroke (cr);
+
+  return TRUE;
+}
+
 
 static gboolean
 on_machine_button_press_event (GtkWidget * widget, GdkEventButton * event,
     gpointer user_data)
 {
   if (event->button == GDK_BUTTON_PRIMARY && event->type == GDK_BUTTON_PRESS) {
-    drag = TRUE;
+    drag = widget;
     mxs = event->x_root;
     mys = event->y_root;
     gtk_container_child_get (GTK_CONTAINER (canvas), widget, "x", &cxs, "y", &cys, NULL);
-    // move child to top, hack?
-    gtk_container_remove (GTK_CONTAINER (canvas), widget);
-    gtk_layout_put (GTK_LAYOUT (canvas), widget, cxs, cys);
   }
   return FALSE;
 }
@@ -95,17 +137,18 @@ on_machine_button_release_event (GtkWidget * widget, GdkEventButton * event,
     gpointer user_data)
 {
   if (event->button == GDK_BUTTON_PRIMARY && event->type == GDK_BUTTON_RELEASE) {
-    drag = FALSE;
+    drag = NULL;
   }
   return FALSE;
 }
 
-GtkWidget *
-make_machine (const char *name)
+static GtkWidget *
+add_machine (GtkLayout *layout, const char *name, gint x, gint y)
 {
-  GtkWidget *image = gtk_image_new_from_pixbuf (gtk_icon_theme_load_icon (it,
-      name, 64,
-      GTK_ICON_LOOKUP_FORCE_SVG | GTK_ICON_LOOKUP_FORCE_SIZE, NULL));
+  GdkPixbuf *pix = gtk_icon_theme_load_icon (it, name, 64,
+      GTK_ICON_LOOKUP_FORCE_SVG | GTK_ICON_LOOKUP_FORCE_SIZE, NULL);
+  GtkWidget *image = gtk_image_new_from_pixbuf (pix);
+  g_object_unref (pix);
 
   GtkWidget *event_box = gtk_event_box_new ();
   gtk_container_add (GTK_CONTAINER (event_box), image);
@@ -118,7 +161,77 @@ make_machine (const char *name)
       G_CALLBACK (on_machine_button_release_event), NULL);
   g_signal_connect (event_box, "motion-notify-event",
       G_CALLBACK (on_machine_motion_notify_event), NULL);
+
+  gtk_layout_put (layout, event_box, x, y);
+
   return event_box;
+}
+
+static void
+get_machine_pos (GtkWidget *child, gint *x, gint *y)
+{
+  gtk_container_child_get ((GtkContainer *)canvas, child, "x", x, "y", y, NULL);
+  gint w = gtk_widget_get_allocated_width (child);
+  gint h = gtk_widget_get_allocated_height (child);
+  *x += w/2;
+  *y += h/2;
+}
+
+static void
+on_wire_changed (GtkWidget *child, GParamSpec * arg, gpointer user_data)
+{
+  GtkWidget *wire = (GtkWidget *)user_data;
+  gint x1, x2, y1, y2;
+  gint x, y, w, h;
+
+  get_machine_pos (icon_s, &x1, &y1);
+  get_machine_pos (icon_e, &x2, &y2);
+
+  if (x2 > x1) {
+    x = x1;
+    w = x2 - x1;
+  } else if (x2 < x1) {
+    x = x2;
+    w = x1 - x2;
+  } else {
+    x = x1;
+    w = 1;
+  }
+  if (y2 > y1) {
+    y = y1;
+    h = y2 - y1;
+  } else if (y2 < y1) {
+    y = y2;
+    h = y1 - y2;
+  } else {
+    y = y1;
+    h = 1;
+  }
+  gtk_widget_set_size_request (wire, w, h);
+  gtk_container_child_set ((GtkContainer *)canvas, wire, "x", x, "y", y, NULL);
+}
+
+static GtkWidget *
+add_wire (GtkLayout *layout, GtkWidget *m1, GtkWidget *m2, const char *name)
+{
+  GtkWidget *wire = gtk_drawing_area_new ();
+
+  // FIXME: we're supposed to call this in _init()
+  // this is a hack for now to make the wire not take events
+  gtk_widget_set_has_window (wire, FALSE);
+
+  g_signal_connect (wire, "draw", G_CALLBACK (on_wire_draw), NULL);
+
+  g_signal_connect (m1, "child-notify::x", G_CALLBACK (on_wire_changed), (gpointer) wire);
+  g_signal_connect (m1, "child-notify::y", G_CALLBACK (on_wire_changed), (gpointer) wire);
+  g_signal_connect (m2, "child-notify::x", G_CALLBACK (on_wire_changed), (gpointer) wire);
+  g_signal_connect (m2, "child-notify::y", G_CALLBACK (on_wire_changed), (gpointer) wire);
+
+  gtk_layout_put (layout, wire, 0, 0);
+  on_wire_changed (NULL, NULL, wire);
+  // FIXME: I mave to physically move it to make it properly redraw
+
+  return wire;
 }
 
 gint
@@ -126,7 +239,6 @@ main (gint argc, gchar * argv[])
 {
   GtkWidget *window = NULL;
   GtkWidget *scrolled_window = NULL;
-  GtkWidget *child1, *child2;
 
   gtk_init (&argc, &argv);
 
@@ -151,11 +263,12 @@ main (gint argc, gchar * argv[])
   gtk_scrolled_window_set_min_content_height (GTK_SCROLLED_WINDOW (scrolled_window), HEIGHT/2);
   g_signal_connect (canvas, "draw", G_CALLBACK (on_canvas_draw), NULL);
 
-  child1 = make_machine (/*"buzztrax_master"*/ "zoom-in");
-  gtk_layout_put (GTK_LAYOUT (canvas), child1, WIDTH/2, HEIGHT/2);
+  // machines
+  icon_s = add_machine (GTK_LAYOUT (canvas), /*"buzztrax_master"*/ "zoom-in", WIDTH/4, HEIGHT/4);
+  icon_e = add_machine (GTK_LAYOUT (canvas), /*"buzztrax_generator"*/ "zoom-out", WIDTH/2, HEIGHT/2);
 
-  child2 = make_machine (/*"buzztrax_generator"*/ "zoom-out");
-  gtk_layout_put (GTK_LAYOUT (canvas), child2, WIDTH/4, HEIGHT/4);
+  // wires
+  add_wire (GTK_LAYOUT (canvas), icon_s, icon_e, "media-play");
 
   gtk_widget_show_all (window);
 
