@@ -31,23 +31,17 @@ static const int16_t SAMPLE_MIN = -(1 << 15);
 static const int16_t SAMPLE_ZERO = 0;
 static const int16_t SAMPLE_MAX = ((1 << 15) - 1);
 static const int16_t SAMPLE_AMP = (1 << 15);
-static const Waveform wave_type = {SAW, SAW, SAW};
+static const char * wave_name[] = {"saw", "sqr", "tri"};
+static const char * flt_name[] = {"low", "mid", "high"};
 
 #define MAX_OSC 1
-static float val[MAX_OSC], inc[MAX_OSC], inc2[MAX_OSC];
-static float flt[FILTER_SIZE * 4];
+static float val[MAX_OSC] = {-1.0, }, inc[MAX_OSC];
+static const Waveform wave_type[MAX_OSC] = {SQR, };
+#define MAX_SLOPE 4
+static float flt[FILTER_SIZE * MAX_SLOPE];
 static float cutoff = 0.5, resonance = 1.0;
-static uint8_t slope = 1;
-static Filter filter_type = LOW;
-
-static void tick(float frq) {
-  printf("note: frq=%f\n", frq);
-  for (uint16_t i = 0; i < MAX_OSC; i++) {
-    val[i] = -1.0;
-    inc[i] = 2.0 / ((float)AUDIO_RATE / frq);
-    inc2[i] = 0.0;
-  }
-}
+static Filter flt_type = LOW;
+static float mi[MAX_SLOPE] = {1.0, }, ma[MAX_SLOPE] = {-1.0, };
 
 static void process(SAMPLE *buffer, uint16_t len) {
   float vol, cut, res, s;
@@ -55,11 +49,6 @@ static void process(SAMPLE *buffer, uint16_t len) {
   uint16_t pos = len;
 
   for (uint16_t i = 0; i < len; i++) {
-    /*if (i%255) {
-      float v = fmod(i * inc[0], 2.0) - 1.0;
-      printf("%5d: %+9.7f == %+9.7f : %9.7f\n", i, val[0], v, val[0] - v);
-    }*/
-
     vol = ((float)pos) / ((float)len);
     vol = (vol * vol) / (float)MAX_OSC;
     // osc + decay env
@@ -88,50 +77,99 @@ static void process(SAMPLE *buffer, uint16_t len) {
       if (val[j] > 1.0) {
           val[j] -= 2.0;
       }
-      inc[j] += inc2[j];
     }
 
     cut = cutoff;
     res = 1.0 / resonance;
     // cascade filters for extra steepness
-    // TODO: compensate for volume increase
-    // - larger resonance makes the sound louder
-    // - each filter cascade also increases the level
     f = flt;
-    for (uint8_t j = 0; j <= slope; j++) {
+    for (uint8_t j = 0; j < MAX_SLOPE; j++) {
       f[HIGH] = s - (f[MID] * res) - f[LOW];
       f[MID] += (f[HIGH] * cut);
       f[LOW] += (f[MID] * cut);
       s = f[flt_type];
-      s = CLAMP(s, -1.0, 1.0);  // clip here or outside?
+
+      // track min/max amp at each stage
+      if (s < mi[j]) {
+        mi[j] = s;
+      } else if (s > ma[j]) {
+        ma[j] = s;
+      }
+
+      // TODO: need softclipping
+      //s = CLAMP(s, -1.0, 1.0);  // clip here or outside?
       f += FILTER_SIZE; // switch to next filter state
     }
 
     // convert to playback format
-    buffer[i] = SAMPLE_ZERO + ((s > 0.0)
-        ? (SAMPLE)(s * (SAMPLE_AMP - 1))
-        : (SAMPLE)(s * SAMPLE_AMP));
+    /*
+    buffer[i] = (SAMPLE)(SAMPLE_ZERO + ((s > 0.0)
+        ? (s * (SAMPLE_AMP - 1))
+        : (s * SAMPLE_AMP)));
+    */
+    int32_t s2 = (SAMPLE_ZERO + ((s > 0.0)
+        ? (s * (SAMPLE_AMP - 1))
+        : (s * SAMPLE_AMP)));
+    buffer[i] = CLAMP(s2, SAMPLE_MIN, SAMPLE_MAX);
+
     pos--;
   }
 }
 
+static void save_sample(const char *name, SAMPLE *buffer, uint16_t len) {
+  FILE *out;
+
+  if ((out=fopen("filter.s16.raw", "wb"))) {
+    fwrite(buffer, sizeof(SAMPLE), len, out);
+    fclose(out);
+  }
+}
+
+/* add a gtk ui with cairo drawable
+ * draw x=osc-frq, y=cut-off frequency, gray is volume
+ * draw 3 images for slope={1,2,3}
+ *
+ * when clicking a point, generate wave, show below and play
+ *
+ * parameters for osc, filter type
+ */
+
 int main(int argc, char **argv) {
   const int buf_len = AUDIO_RATE; // 1 second
   SAMPLE buf[buf_len];
-  FILE *out;
-  float frq = 110.0;
+  float frq = 10.0;
 
-  if (argc > 1) {
-    frq = atof(argv[1]);
+  for (int i=0; i<argc; i++) {
+    switch (i) {
+      case 1:
+        cutoff = atof(argv[i]);
+        break;
+      case 2:
+        resonance = atof(argv[i]);
+        break;
+    }
   }
+  printf("# wave=%s, filter=%s, cutoff=%f, resonance=%f\n",
+      wave_name[wave_type[0]], flt_name[flt_type], cutoff, resonance);
 
-  tick(frq);
-  process(buf, buf_len);
+  while(frq < AUDIO_RATE / 2) {
+    for (uint8_t i = 0; i < MAX_OSC; i++) {
+      inc[i] = 2.0 / ((float)AUDIO_RATE / frq);
+    }
+    process(buf, buf_len);
+
+    // report volumes
+    printf("%7.1f", frq);
+    for (uint8_t j = 1; j < MAX_SLOPE; j++) {
+      float fcmi = mi[j] / mi[j-1], fcma = ma[j] / ma[j-1];
+      printf(", %7.4f", ((fcmi > fcma) ? fcmi : fcma));
+    }
+    putchar('\n');
+    frq+=frq;
+  }
 
   // write to file
-  if ((out=fopen("filter.s16.raw", "wb"))) {
-    fwrite(buf, sizeof(SAMPLE), buf_len, out);
-    fclose(out);
-  }
+  if (0) save_sample("filter.s16.raw", buf, buf_len);
+
   return 0;
 }

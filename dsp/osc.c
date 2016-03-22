@@ -85,9 +85,9 @@ static void process(SAMPLE *buffer, uint16_t len) {
     s = CLAMP(s, -1.0, 1.0);
 
     // convert to playback format
-    buffer[i] = SAMPLE_ZERO + ((s > 0.0)
-        ? (SAMPLE)(s * (SAMPLE_AMP - 1))
-        : (SAMPLE)(s * SAMPLE_AMP));
+    buffer[i] = (SAMPLE)(SAMPLE_ZERO + ((s > 0.0)
+        ? (s * (SAMPLE_AMP - 1))
+        : (s * SAMPLE_AMP)));
     pos--;
   }
 }
