@@ -4,7 +4,7 @@
  * issue. This emulates the whole stucture in buzztrax, loop2.c has a cut-down
  * version that shows the problem.
  *
- * gcc -g loop3.c -o loop3 `pkg-config gstreamer-1.0 gstreamer-controller-1.0 libgstbuzztrax --cflags --libs`
+ * gcc -g loop3.c -o loop3 `pkg-config gstreamer-1.0 gstreamer-controller-1.0 libbuzztrax-gst --cflags --libs`
  * GST_DEBUG_NO_COLOR=1 GST_DEBUG="*loop*:4,*audiosynth*:5,*sim*:6" ./loop3 2 2>debug.log
  */
 
@@ -14,7 +14,7 @@
 #include <gst/gst.h>
 #include <gst/controller/gsttriggercontrolsource.h>
 #include <gst/controller/gstdirectcontrolbinding.h>
-#include <libgstbuzztrax/musicenums.h>
+#include <libbuzztrax-gst/musicenums.h>
 
 /* configuration */
 static gchar *src_names[] = {
