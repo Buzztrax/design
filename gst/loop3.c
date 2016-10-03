@@ -5,8 +5,7 @@
  * version that shows the problem.
  *
  * gcc -g loop3.c -o loop3 `pkg-config gstreamer-1.0 gstreamer-controller-1.0 libbuzztrax-gst --cflags --libs`
- * GST_DEBUG_NO_COLOR=1 GST_DEBUG="*loop*:4,*audiosynth*:5,*sim*:6" ./loop3 2 2>debug.log
- */
+ * GST_DEBUG_NO_COLOR=1 GST_DEBUG_FILE="debug.log" GST_DEBUG="*loop*:4,*audiosynth*:5,*sim*:6" ./loop3 2
 
 #include <stdio.h>
 #include <stdlib.h>

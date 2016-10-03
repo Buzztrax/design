@@ -32,10 +32,10 @@
  *   might be still buffers traveling downstream, those should not be
  *   interrupted
  * - src can send segment-start message and new-segment-event right away when
- *   the handle the seek, as they have been paused anyway 
+ *   the handle the seek, as they have been paused anyway
  *
  * gcc -g loop2.c -o loop2 `pkg-config gstreamer-1.0 gstreamer-controller-1.0 --cflags --libs`
- * GST_DEBUG_NO_COLOR=1 GST_DEBUG="*:2,loop:4,*CLOCK*:4,*pulse*:5,*sink*:5,*src**:5" ./loop2 4 2>debug.log
+ * GST_DEBUG_NO_COLOR=1 GST_DEBUG_FILE="debug.log" GST_DEBUG="*:2,loop:4,*CLOCK*:4,*pulse*:5,*sink*:5,*src**:5" ./loop2 4
  */
 
 #include <stdio.h>
@@ -49,11 +49,11 @@
 //#define FX1_NAME "queue"
 //#define FX2_NAME "identity"
 
-// plays just once
+// hangs: loop playback ( 0)
 #define FX1_NAME "queue"
 #define FX2_NAME "adder"
 
-// plays just once
+// works
 //#define FX1_NAME "identity"
 //#define FX2_NAME "adder"
 
@@ -213,7 +213,7 @@ make_src (void)
   if (!(e = gst_element_factory_make (SRC_NAME, NULL))) {
     return NULL;
   }
-  g_object_set (e, "wave", 2, NULL);
+  g_object_set (e, "wave", 2, /*"samplesperbuffer", 128,*/ NULL);
 
   /* setup controller */
   cs = gst_interpolation_control_source_new ();
@@ -235,11 +235,11 @@ make_src (void)
   cs = gst_interpolation_control_source_new ();
   g_object_set (cs, "mode", GST_INTERPOLATION_MODE_LINEAR, NULL);
   gst_object_add_control_binding (GST_OBJECT_CAST (e),
-      gst_direct_control_binding_new (GST_OBJECT_CAST (e), "freq", cs));
+      gst_direct_control_binding_new_absolute (GST_OBJECT_CAST (e), "freq", cs));
 
   /* set control values */
-  double_ctrl_value_set (cs, 0, 110.0 / 20000.0);
-  double_ctrl_value_set (cs, 999, 440.0 / 20000.0);
+  double_ctrl_value_set (cs, 0, 110.0);
+  double_ctrl_value_set (cs, 999, 440.0);
 
   return e;
 }
