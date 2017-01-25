@@ -27,7 +27,7 @@ fmtnego
 latency
 latencies_*/
 link?
-loop*
+loop?
 looplock
 net?
 oggmux
@@ -44,4 +44,3 @@ test
 timing
 tonematrix
 transport
-design/gst/seekinready

@@ -9,6 +9,7 @@
  * - it is not the low-latency setting on the sink
  * - it does not seem to be the bins
  * - it is not the cpu load
+ *   - we tried to renice and also change to rt schduling (rt helps a bit)
  * - it is not the number of elements
  * - it is not caused by sending out copies of upstream events in adder, as we
  *   have just one upstream in this example
@@ -32,10 +33,15 @@
  *   might be still buffers traveling downstream, those should not be
  *   interrupted
  * - src can send segment-start message and new-segment-event right away when
- *   the handle the seek, as they have been paused anyway
+ *   they handle the seek, as they have been paused anyway
  *
  * gcc -g loop2.c -o loop2 `pkg-config gstreamer-1.0 gstreamer-controller-1.0 --cflags --libs`
+ * loop2 <num-loops> <flushing> <sync-msg>
+ *
  * GST_DEBUG_NO_COLOR=1 GST_DEBUG_FILE="debug.log" GST_DEBUG="*:2,loop:4,*CLOCK*:4,*pulse*:5,*sink*:5,*src**:5" ./loop2 4
+ *
+ * GST_DEBUG_NO_COLOR=1 GST_DEBUG_FILE="debug.log" GST_DEBUG="*:2,loop:4,bt-core:5,basesrc:5" ./loop2 4
+ * egrep "(pausing after end|loop playback)" debug.log
  */
 
 #include <stdio.h>
@@ -60,6 +66,11 @@
 #define SRC_NAME "audiotestsrc"
 #define SINK_NAME "pulsesink"
 
+#define BPM 120
+#define TPB 4
+
+#define GST_BUG_733031
+
 #define GST_CAT_DEFAULT gst_test_debug
 GST_DEBUG_CATEGORY_STATIC (GST_CAT_DEFAULT);
 
@@ -69,7 +80,8 @@ static GstEvent *play_seek_event = NULL;
 static GstEvent *loop_seek_event = NULL;
 // command line options
 static gint num_loops = 10;
-static gboolean flushing_loops = FALSE;
+static gboolean flushing_seeks = FALSE;
+static gboolean sync_message = FALSE;
 
 static void
 message_received (GstBus * bus, GstMessage * message, GstPipeline * pipeline)
@@ -93,6 +105,7 @@ message_received (GstBus * bus, GstMessage * message, GstPipeline * pipeline)
   g_main_loop_quit (main_loop);
 }
 
+#ifndef GST_BUG_733031
 static void
 send_initial_seek (GstBin * bin)
 {
@@ -130,6 +143,7 @@ send_initial_seek (GstBin * bin)
   g_value_unset (&item);
   gst_iterator_free (it);
 }
+#endif
 
 static void
 state_changed (const GstBus * const bus, GstMessage * message, GstElement * bin)
@@ -146,9 +160,18 @@ state_changed (const GstBus * const bus, GstMessage * message, GstElement * bin)
         gst_element_state_get_name (newstate));
     switch (GST_STATE_TRANSITION (oldstate, newstate)) {
       case GST_STATE_CHANGE_NULL_TO_READY:
+#ifndef GST_BUG_733031
+        send_initial_seek ((GstBin *) bin);
+#endif
+        break;
+      case GST_STATE_CHANGE_READY_TO_PAUSED:
         GST_INFO
             ("initial seek ===========================================================");
-        send_initial_seek ((GstBin *) bin);
+#ifdef GST_BUG_733031
+        if (!(gst_element_send_event (bin, gst_event_ref (play_seek_event)))) {
+          GST_WARNING_OBJECT (bin, "element failed to handle seek event");
+        }
+#endif
         // start playback
         GST_INFO
             ("start playing ==========================================================");
@@ -178,9 +201,14 @@ static void
 segment_done (const GstBus * const bus, const GstMessage * const message,
     GstElement * bin)
 {
-  static gint loop = 0;
   GstEvent *event =
-      gst_event_copy (flushing_loops ? play_seek_event : loop_seek_event);
+      gst_event_copy (flushing_seeks ? play_seek_event : loop_seek_event);
+
+  static gint loop = 0;
+  loop++;
+  if (loop == num_loops) {
+    g_main_loop_quit (main_loop);
+  }
 
   GST_INFO
       ("loop playback (%2d) =====================================================",
@@ -189,11 +217,6 @@ segment_done (const GstBus * const bus, const GstMessage * const message,
   if (!(gst_element_send_event (bin, event))) {
     fprintf (stderr, "element failed to handle continuing play seek event\n");
     g_main_loop_quit (main_loop);
-  } else {
-    if (loop == num_loops) {
-      g_main_loop_quit (main_loop);
-    }
-    loop++;
   }
 }
 
@@ -209,11 +232,13 @@ make_src (void)
 {
   GstElement *e;
   GstControlSource *cs;
+  gint spb;
 
   if (!(e = gst_element_factory_make (SRC_NAME, NULL))) {
     return NULL;
   }
-  g_object_set (e, "wave", 2, /*"samplesperbuffer", 128,*/ NULL);
+  spb = (60 * 44100) / (BPM * TPB);
+  g_object_set (e, "wave", 2, "samplesperbuffer", spb, NULL);
 
   /* setup controller */
   cs = gst_interpolation_control_source_new ();
@@ -253,7 +278,7 @@ make_sink (void)
   if (!(e = gst_element_factory_make (SINK_NAME, NULL))) {
     return NULL;
   }
-  chunk = GST_TIME_AS_USECONDS ((GST_SECOND * 60) / (120 * 4));
+  chunk = GST_TIME_AS_USECONDS ((GST_SECOND * 60) / (BPM * TPB));
   GST_INFO ("changing audio chunk-size for sink to %" G_GUINT64_FORMAT
       " µs = %" G_GUINT64_FORMAT " ms", chunk,
       (chunk / G_GINT64_CONSTANT (1000)));
@@ -277,21 +302,30 @@ main (gint argc, gchar ** argv)
   if (argc > 1) {
     num_loops = atoi (argv[1]);
     if (argc > 2) {
-      flushing_loops = (atoi (argv[2]) != 0);
+      flushing_seeks = (atoi (argv[2]) != 0);
+      if (argc > 3) {
+        sync_message = (atoi (argv[3]) != 0);
+      }
     }
   }
 
   /* create a new bin to hold the elements */
   bin = gst_pipeline_new ("pipeline");
-  /* see if we get errors */
+  /* register bus message handlers */
   bus = gst_pipeline_get_bus (GST_PIPELINE (bin));
   gst_bus_add_signal_watch_full (bus, G_PRIORITY_HIGH);
+  if (sync_message) {
+    gst_bus_enable_sync_message_emission (bus);
+    g_signal_connect (bus, "sync-message::segment-done",
+        G_CALLBACK (segment_done), bin);
+  } else {
+    g_signal_connect (bus, "message::segment-done", G_CALLBACK (segment_done),
+        bin);
+  }
   g_signal_connect (bus, "message::error", G_CALLBACK (message_received), bin);
   g_signal_connect (bus, "message::warning", G_CALLBACK (message_received),
       bin);
   g_signal_connect (bus, "message::eos", G_CALLBACK (message_received), bin);
-  g_signal_connect (bus, "message::segment-done", G_CALLBACK (segment_done),
-      bin);
   g_signal_connect (bus, "message::async-done", G_CALLBACK (async_done), bin);
   g_signal_connect (bus, "message::state-changed", G_CALLBACK (state_changed),
       bin);
@@ -338,11 +372,19 @@ main (gint argc, gchar ** argv)
   /* prepare playing */
   GST_INFO
       ("prepare playing ========================================================");
+#ifdef GST_BUG_733031
+  res = gst_element_set_state (bin, GST_STATE_PAUSED);
+  if (res == GST_STATE_CHANGE_FAILURE) {
+    fprintf (stderr, "Can't go to paused\n");
+    exit (-1);
+  }
+#else
   res = gst_element_set_state (bin, GST_STATE_READY);
   if (res == GST_STATE_CHANGE_FAILURE) {
     fprintf (stderr, "Can't go to ready\n");
     exit (-1);
   }
+#endif
   g_main_loop_run (main_loop);
 
   /* stop the pipeline */
