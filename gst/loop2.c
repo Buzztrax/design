@@ -13,6 +13,8 @@
  * - it is not the number of elements
  * - it is not caused by sending out copies of upstream events in adder, as we
  *   have just one upstream in this example
+ * - it is not the delay between getting segment_done and sending the new seek,
+ *   using sync-message:segment-done does not show any improvement
  *
  * Things we noticed:
  * - on the netbook the loops are smoother when using alsasink, compared to
@@ -38,10 +40,8 @@
  * gcc -g loop2.c -o loop2 `pkg-config gstreamer-1.0 gstreamer-controller-1.0 --cflags --libs`
  * loop2 <num-loops> <flushing> <sync-msg>
  *
- * GST_DEBUG_NO_COLOR=1 GST_DEBUG_FILE="debug.log" GST_DEBUG="*:2,loop:4,*CLOCK*:4,*pulse*:5,*sink*:5,*src**:5" ./loop2 4
- *
- * GST_DEBUG_NO_COLOR=1 GST_DEBUG_FILE="debug.log" GST_DEBUG="*:2,loop:4,bt-core:5,basesrc:5" ./loop2 4
- * egrep "(pausing after end|loop playback)" debug.log
+ * GST_DEBUG_NO_COLOR=1 GST_DEBUG_FILE="loop2.log" GST_DEBUG="*:2,loop:4,bt-core:5,basesrc:5,*basesink:5" ./loop2 10
+ * ./loop2.sh
  */
 
 #include <stdio.h>
@@ -51,13 +51,18 @@
 #include <gst/controller/gstinterpolationcontrolsource.h>
 #include <gst/controller/gstdirectcontrolbinding.h>
 
+// some 'fx' variants
 // works
 //#define FX1_NAME "queue"
 //#define FX2_NAME "identity"
 
-// hangs: loop playback ( 0)
+// this makes the most problems
 #define FX1_NAME "queue"
 #define FX2_NAME "adder"
+
+// no non-flushing seeks :/ supported yet
+//#define FX1_NAME "queue"
+//#define FX2_NAME "audiomixer"
 
 // works
 //#define FX1_NAME "identity"
@@ -270,6 +275,21 @@ make_src (void)
 }
 
 static GstElement *
+make_fx (const gchar *element_name)
+{
+  GstElement *e;
+
+  if (!(e = gst_element_factory_make (element_name, NULL))) {
+    return NULL;
+  }
+  if (!strcmp (element_name, "queue")) {
+    g_object_set (G_OBJECT (e), "max-size-buffers", 1, "max-size-bytes", 0,
+        "max-size-time", G_GUINT64_CONSTANT (0), "silent", TRUE, NULL);
+  }
+  return e;
+}
+
+static GstElement *
 make_sink (void)
 {
   GstElement *e;
@@ -338,11 +358,11 @@ main (gint argc, gchar ** argv)
     fprintf (stderr, "Can't create element \"" SRC_NAME "\"\n");
     exit (-1);
   }
-  if (!(fx1 = gst_element_factory_make (FX1_NAME, NULL))) {
+  if (!(fx1 = make_fx (FX1_NAME))) {
     fprintf (stderr, "Can't create element \"" FX1_NAME "\"\n");
     exit (-1);
   }
-  if (!(fx2 = gst_element_factory_make (FX2_NAME, NULL))) {
+  if (!(fx2 = make_fx (FX2_NAME))) {
     fprintf (stderr, "Can't create element \"" FX2_NAME "\"\n");
     exit (-1);
   }
