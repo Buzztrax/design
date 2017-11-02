@@ -37,13 +37,14 @@
  *   returns 0 all the time
  */
 /* todo:
- * - test how many buffers we do with the clock not yet running for each sink
+ * - test how many buffers we do with the clock not yet running (preroll) for
+ *   each sink
  *   alsa: 9, pulse: 6, jack: 6
  * - figure out why we do that for more than one buffer
  * - see if we could do a delayed wakeup on the queue
  *   - that would need to know how long it takes on average for upstream to
  *     produce a buffer
- *   - this would make more sense for a threadbarrier element (always one buffer)
+ *   - this would make more sense for a thread-barrier element (always one buffer)
  *     - we need to track when we ask upstream to produce a buffer and
  *       how long it takes to make it
  *     - if the buffer-duration is constant, we can delay making the buffers

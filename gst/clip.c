@@ -87,7 +87,7 @@ main (gint argc, gchar ** argv)
     if (!msg)
       continue;
 
-  GST_DEBUG_OBJECT (GST_MESSAGE_SRC (msg), "bus msg: %" GST_PTR_FORMAT, msg);
+    GST_DEBUG_OBJECT (GST_MESSAGE_SRC (msg), "bus msg: %" GST_PTR_FORMAT, msg);
 
     switch (msg->type) {
       case GST_MESSAGE_STATE_CHANGED:
