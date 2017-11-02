@@ -1,6 +1,7 @@
 #!/bin/bash
 
-LOG="loop2.log"
+LOG="${1:-loop2.log}"
+BASE=$(basename "${LOG}" ".log")
 
 # get latency time:
 grep -o "changing audio chunk-size for sink.*" "${LOG}"
@@ -17,17 +18,19 @@ grep -o -i "discont" "${LOG}" | sort | uniq -c
 grep -o -i "gap" "${LOG}" | sort | uniq -c
 
 #
-# egrep -i "(segment_done|discont|gap)" loop2.log
+# egrep -i "(segment_done|discont|gap)" "${LOG}"
 
 # plot media time (y) vs. when data was received = log-ts (x)
 # FIXME: we expect a sawtooth/triangle  like curve
-# 
-grep "audiobasesink" loop2.log | grep "time 0" | sed -e 's/  */:/g' -e 's/,/:/g' | cut -d':' -f3,15 | sed -e 's/:0/ /' -e 's/^0//g' >/tmp/loop2_times.csv
+#
+grep "audiobasesink" "${LOG}" | grep "time 0" | sed -e 's/  */:/g' -e 's/,/:/g' | cut -d':' -f3,15 | sed -e 's/:0/ /' -e 's/^0//g' >/tmp/${BASE}_t1.csv
+grep "base_sink_chain" "${LOG}" | grep "got times start: 0" | sed -e 's/  */:/g' -e 's/,/:/g' | cut -d':' -f3,18 | sed -e 's/:0/ /' -e 's/^0//g' >/tmp/${BASE}_t2.csv
 
 cat | gnuplot <<EOF
 set term png truecolor size 1024,768
-set output 'loop2.png'
-plot '/tmp/loop2_times.csv' using 1:2 with linespoints title 'sink'
+set output '${BASE}.png'
+plot '/tmp/${BASE}_t1.csv' using 1:2 with linespoints title 'audiobasesink->render', \
+     '/tmp/${BASE}_t2.csv' using 1:2 with linespoints title 'basesink->chain'
 EOF
 
-
+echo "timeline plot in ${BASE}.png"

@@ -24,9 +24,10 @@
  * - it is caused by "queue ! adder"
  *
  * Some facts:
- * - basesrc/sink post segment-done messages from _loop()
+ * - basesrc/sink only post segment-done messages from _loop() (pull mode)
  *   - both pause the task also
  * - we only run the source in loop(), sink uses chain()
+ * - therefore sources post segment_done events (downstream, serialized)
  * - the messages get aggregated by the bin, once a _done message is received
  *   for each previously received _start, the bin send _done
  * - especially in deep pipelines this will happend before the data actually
@@ -36,6 +37,74 @@
  *   interrupted
  * - src can send segment-start message and new-segment-event right away when
  *   they handle the seek, as they have been paused anyway
+ *
+ * - audiobasesink implements the time-sync code, gst_audio_base_sink_get_times()
+ *   returns (-1,-1) to bypass the sync code in basesink
+ *   - this breaks qos (thats why it is not working even if we enable it)
+ *
+ * - we're already missing buffers in gst_base_sink_chain_unlocked() (which
+ *   calls gst_audio_base_sink_render()):
+ *   if we play a song in buzztrax and run the loop2.sh script, we can see it in
+ *   the generated png
+
+
+ * - it seems to be causes be the collectpads behaviour in adder:
+ *   - gst_adder_collected() is called when all pads have data
+ *   - events are not queued!
+ *   - we send our synthetic 'new-segemnt' from _collected() to ensure we send
+ *     it before the buffers it applies to
+ *   - we also should send the 'segment-done' from _collected() after we pushed
+ *     the last buffer of the segment
+ *   - events:
+ *     - when we get a seek on 'src', we forward this to all sink-pads
+ *       and flag that we need to send a new-segment ourself
+ *     - each upstream will send a new-segment event, we will drop those
+ *       FIXME: only once we have new-segment from each upstream we should
+ *       flag that we need to send the new-segment outself?
+ *       - segment-events are supposed to be serialized
+ *     - each upstream will send a segment-done, we drop those
+ *  - issuess:
+ *    - the _src_event() is not called from the same thread as _collected()
+ *    - when we get a seek, we haven't seek'ed yet, there might be buffers in
+ *      flight, we are definitely truncating segments when looping
+ *    - FIXME: when we get the seek, me must only queue up the new segment and
+ *      activate it from _collected()
+
+
+ * TODO:
+ * - add a parameter to repeat the FX1/FX2 pairs n-times to verify how many
+ *   buffers source creating quickly to restart playing
+ * - also test the effect of bin nesting depth
+ * - the graphs produced by ./gsttr-tsplot.py show that source-elements have
+ *   a gap between segment-done and segment - what are bins waiting for?
+ *   - we have the time we get the last segment-done
+ *   - we have the time the bin posts the segment-done message:
+ *     gst_element_post_message
+ *   - check when the app seeks again: gst_element_send_event
+ *
+ * Design:
+ * - the main issue is that we wait until all sources have posted SEGMENT_DONE,
+ *   the bin has matched each SEGMENT_START with a SEGMENT_DONE, posted a
+ *   SEGMENT_DONE posted in turn until the pipleline got all SEGMENTS finished
+ *   and posts the SEGMENT_DONE message, the app has received it and sent a new
+ *   SEEK event
+ * - there are two variants of segmented seeks that could be done with less
+ *   application involvement: looping, playists. We can implement looping as a
+ *   special playlist.
+ * - proposal
+ *   - the application sends a PLAYLIST event before sending the initial,
+ *     flushing segmented seek
+ *   - the playlist event is a list of of tupels (seek event, repeat-count)
+ *     - seek events should be non flushing and must have a stop position except
+ *       if it is the last entry and repeat-count is 1
+ *     - repeat-count has a special value for INDEF which is only allowed if
+ *       this is the final entry
+ *   - all bins that have sources which are not bins store the playlist
+ *   - when a bin gets SEGMENT_DONE from a child that is not a bin, it sends the
+ *     next seek event from the playlist (updating repeat counts)
+ *   - the application can still handle SEGMENT_DONE to track playlist progress
+ * - open issues: we still need a flushing seek to kickstart playback, ideally
+ *   we send the PLAYLIST in PAUSED and playback start from it
  *
  * gcc -g loop2.c -o loop2 `pkg-config gstreamer-1.0 gstreamer-controller-1.0 --cflags --libs`
  * loop2 <num-loops> <flushing> <sync-msg>
@@ -57,11 +126,16 @@
 //#define FX2_NAME "identity"
 
 // this makes the most problems
-#define FX1_NAME "queue"
-#define FX2_NAME "adder"
-
-// no non-flushing seeks :/ supported yet
 //#define FX1_NAME "queue"
+//#define FX2_NAME "adder"
+
+// weird dropouts if non-flusing (queue related?)
+// requires this for non flushing seeks: https://bugzilla.gnome.org/show_bug.cgi?id=757563
+#define FX1_NAME "queue"
+#define FX2_NAME "audiomixer"
+
+// works with the patches in https://bugzilla.gnome.org/show_bug.cgi?id=757563
+//#define FX1_NAME "identity"
 //#define FX2_NAME "audiomixer"
 
 // works
@@ -74,6 +148,7 @@
 #define BPM 120
 #define TPB 4
 
+// undef to try to seek in ready state
 #define GST_BUG_733031
 
 #define GST_CAT_DEFAULT gst_test_debug
@@ -208,6 +283,24 @@ segment_done (const GstBus * const bus, const GstMessage * const message,
 {
   GstEvent *event =
       gst_event_copy (flushing_seeks ? play_seek_event : loop_seek_event);
+#ifndef GST_DISABLE_GST_DEBUG
+  GstFormat format;
+  gint64 position;
+  guint32 seek_seqnum = gst_message_get_seqnum ((GstMessage *) message);
+  // check how regullar the SEGMENT DONE comes
+  static GstClockTime last_ts = 0;
+  GstClockTime this_ts = gst_util_get_timestamp ();
+  GstClockTimeDiff ts_diff = last_ts ? (this_ts - last_ts) : 0;
+  last_ts = this_ts;
+
+  gst_message_parse_segment_done ((GstMessage *) message, &format, &position);
+#endif
+
+  GST_INFO
+      ("received SEGMENT_DONE (%u) bus message: from %s, with fmt=%s, ts=%"
+      GST_TIME_FORMAT " after %" GST_TIME_FORMAT, seek_seqnum,
+      GST_OBJECT_NAME (GST_MESSAGE_SRC (message)), gst_format_get_name (format),
+      GST_TIME_ARGS (position), GST_TIME_ARGS (ts_diff));
 
   static gint loop = 0;
   loop++;

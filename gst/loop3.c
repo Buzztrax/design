@@ -6,6 +6,7 @@
  *
  * gcc -g loop3.c -o loop3 `pkg-config gstreamer-1.0 gstreamer-controller-1.0 libbuzztrax-gst --cflags --libs`
  * GST_DEBUG_NO_COLOR=1 GST_DEBUG_FILE="debug.log" GST_DEBUG="*loop*:4,*audiosynth*:5,*sim*:6" ./loop3 2
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -249,6 +250,10 @@ make_wire (void)
       gst_element_link (e[i - 1], e[i]);
     }
   }
+
+  /* queue */
+  g_object_set (e[0], "max-size-buffers", 1, "max-size-bytes", 0,
+      "max-size-time", G_GUINT64_CONSTANT (0), "silent", TRUE, NULL);
 
   /* pads */
   tp = gst_element_get_static_pad (e[i - 1], "src");
