@@ -1,8 +1,10 @@
 /*
- * gcc -std=c99 osc.c -o osc -lm
+ * gcc -std=c99 osc_shape.c -o osc_shape -lm
  *
- * ./osc <frq hz>
- * aplay --rate=22050 --format=S16 osc.s16.raw
+ * ./osc_shape <frq>
+ * aplay --rate=22050 --format=S16 osc_shape.s16.raw
+ *
+ * If we go up to 1.0, we just get a double pitch
  */
 
 #include <math.h>
@@ -24,21 +26,18 @@ static const int16_t SAMPLE_MIN = -(1 << 15);
 static const int16_t SAMPLE_ZERO = 0;
 static const int16_t SAMPLE_MAX = ((1 << 15) - 1);
 static const int16_t SAMPLE_AMP = (1 << 15);
-static const Waveform wave_type[] = {SAW, SAW, SAW};
-static const int detune_coarse[] = {0, 4, 7};
-static const int detune_fine[] = {0, 0, 0};
+static const Waveform wave_type[] = {SAW, SAW};
 
-#define MAX_OSC 3
+#define MAX_OSC 2
 static float val[MAX_OSC], inc[MAX_OSC];
 
-static void tick(float frq) {
-  printf("note: frq=%f\n", frq);
+static void tick(float frq, float shift) {
+  printf("note: frq=%f, shift=%f\n", frq, shift);
   for (uint16_t i = 0; i < MAX_OSC; i++) {
-    float d = pow (2.0, (detune_coarse[i] / 12.0)) * pow (2.0, (detune_fine[i] / 1200.0));
     val[i] = -1.0;
-    inc[i] = 2.0 / ((float)AUDIO_RATE / (frq * d));
-    printf("d=%7.4f, %+2d %+3d\n", d, detune_coarse[i], detune_fine[i]);
+    inc[i] = 2.0 / ((float)AUDIO_RATE / frq);
   }
+  val[1] += shift;
 }
 
 static void process(SAMPLE *buffer, uint16_t len) {
@@ -95,17 +94,19 @@ int main(int argc, char **argv) {
   SAMPLE buf[buf_len];
   FILE *out;
   float frq = 110.0;
+  float shift;
 
   if (argc > 1) {
     frq = atof(argv[1]);
   }
 
-  tick(frq);
-  process(buf, buf_len);
-
   // write to file
-  if ((out=fopen("osc.s16.raw", "wb"))) {
-    fwrite(buf, sizeof(SAMPLE), buf_len, out);
+  if ((out=fopen("osc_shape.s16.raw", "wb"))) {
+    for (shift=0.0; shift<1.0;shift+=0.1) {
+      tick(frq, shift);
+      process(buf, buf_len);
+      fwrite(buf, sizeof(SAMPLE), buf_len, out);
+    }
     fclose(out);
   }
   return 0;

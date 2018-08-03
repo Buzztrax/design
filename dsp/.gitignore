@@ -2,6 +2,8 @@ filter
 filter.*.raw
 osc
 osc.*.raw
+osc_shape
+osc_shape.*.raw
 *.dat
 .ipynb_checkpoints
 
