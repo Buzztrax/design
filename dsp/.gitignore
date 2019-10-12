@@ -4,6 +4,7 @@ osc
 osc.*.raw
 osc_shape
 osc_shape.*.raw
+sine_bench
 *.dat
 .ipynb_checkpoints
 
