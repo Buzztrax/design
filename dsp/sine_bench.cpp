@@ -60,9 +60,8 @@ static void BM_FastSineD(benchmark::State& state) {
     double c1 = cos(angle); 
     for (int i = 0; i < STEPS; i++) {
       benchmark::DoNotOptimize(skk = c1 * sk + s1 * ck);
-      benchmark::DoNotOptimize(ckk = c1 * ck - s1 * sk);
+      benchmark::DoNotOptimize(ck = c1 * ck - s1 * sk);
       sk = skk;
-      ck = ckk;
     }
   }
 }
@@ -77,9 +76,8 @@ static void BM_FastSineF(benchmark::State& state) {
     float c1 = cos(angle); 
     for (int i = 0; i < STEPS; i++) {
       benchmark::DoNotOptimize(skk = c1 * sk + s1 * ck);
-      benchmark::DoNotOptimize(ckk = c1 * ck - s1 * sk);
+      benchmark::DoNotOptimize(ck = c1 * ck - s1 * sk);
       sk = skk;
-      ck = ckk;
     }
   }
 }
