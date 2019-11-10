@@ -15,6 +15,8 @@
  * observations:
  * -O3: the _X2 functions get slower?)
  * -ftree-vectorize:  BM_FastSineD becomes faster than BM_FastSineF
+ *
+ * use bench.sh to disable cpu freq scaling, etc.
  */
 
 #include <benchmark/benchmark.h>
@@ -180,6 +182,20 @@ static void BM_FTabSineFInt(benchmark::State& state) {
 }
 
 BENCHMARK(BM_FTabSineFInt);
+
+static void BM_FTabSineFIntDelta(benchmark::State& state) {
+  const float rad2brad = 256.0 / (2.0 * M_PI);
+  float angle = (M_PI / STEPS) * rad2brad;
+  for (auto _ : state) {
+    float a = 0.0;
+    for (int i = 0; i < STEPS; i++) {
+      benchmark::DoNotOptimize(ftab_sin_int_delta(a));
+      a += angle;
+    }
+  }
+}
+
+BENCHMARK(BM_FTabSineFIntDelta);
 
 
 BENCHMARK_MAIN();
