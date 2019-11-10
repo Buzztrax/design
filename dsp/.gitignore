@@ -5,6 +5,8 @@ osc.*.raw
 osc_shape
 osc_shape.*.raw
 sine_bench
+sine_quality
 *.dat
+QM_*.s16.raw
 .ipynb_checkpoints
 

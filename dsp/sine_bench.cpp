@@ -5,9 +5,9 @@
  *
  * export BENCH_DIR=$HOME/projects/tools/benchmark
  * # without optimizations
- * g++ sine_bench.cpp -std=c++11 -isystem $BENCH_DIR/include -L$BENCH_DIR/build/src -lbenchmark -lpthread -o sine_bench
+ * g++ sine_bench.cpp -std=c++11 -isystem $BENCH_DIR/include -I. -L$BENCH_DIR/build/src -lbenchmark -lpthread -o sine_bench
  * # with optimizations
- * g++ -O2 -march=native sine_bench.cpp -std=c++11 -isystem $BENCH_DIR/include -L$BENCH_DIR/build/src -lbenchmark -lpthread -o sine_bench
+ * g++ -O2 -march=native sine_bench.cpp -std=c++11 -isystem $BENCH_DIR/include -I. -L$BENCH_DIR/build/src -lbenchmark -lpthread -o sine_bench
  *
  * run without args:
  * ./sine_bench
@@ -16,9 +16,12 @@
  * -O3: the _X2 functions get slower?)
  * -ftree-vectorize:  BM_FastSineD becomes faster than BM_FastSineF
  */
- 
+
 #include <benchmark/benchmark.h>
+#include <stdint.h>
 #include <math.h>
+
+#include <sines.h>
 
 const double STEPS = 32;
 
@@ -56,8 +59,8 @@ static void BM_FastSineD(benchmark::State& state) {
   double angle = M_PI / STEPS;
   for (auto _ : state) {
     double sk = 0.0, ck = 1.0, skk, ckk;
-    double s1 = sin(angle); 
-    double c1 = cos(angle); 
+    double s1 = sin(angle);
+    double c1 = cos(angle);
     for (int i = 0; i < STEPS; i++) {
       benchmark::DoNotOptimize(skk = c1 * sk + s1 * ck);
       benchmark::DoNotOptimize(ck = c1 * ck - s1 * sk);
@@ -72,8 +75,8 @@ static void BM_FastSineF(benchmark::State& state) {
   float angle = M_PI / STEPS;
   for (auto _ : state) {
     float sk = 0.0, ck = 1.0, skk, ckk;
-    float s1 = sin(angle); 
-    float c1 = cos(angle); 
+    float s1 = sin(angle);
+    float c1 = cos(angle);
     for (int i = 0; i < STEPS; i++) {
       benchmark::DoNotOptimize(skk = c1 * sk + s1 * ck);
       benchmark::DoNotOptimize(ck = c1 * ck - s1 * sk);
@@ -131,5 +134,52 @@ static void BM_FasterSineF_X2(benchmark::State& state) {
 }
 
 BENCHMARK(BM_FasterSineF_X2);
+
+// Quarter Table Sine ----------------------------------------------------------
+
+static void BM_QTabSineF(benchmark::State& state) {
+  const float rad2brad = 255.0 / (2.0 * M_PI);
+  float angle = (M_PI / STEPS) * rad2brad;
+  for (auto _ : state) {
+    float a = 0.0;
+    for (int i = 0; i < STEPS; i++) {
+      benchmark::DoNotOptimize(qtab_sin(a));
+      a += angle;
+    }
+  }
+}
+
+BENCHMARK(BM_QTabSineF);
+
+// Full Table Sine -------------------------------------------------------------
+
+static void BM_FTabSineF(benchmark::State& state) {
+  const float rad2brad = 256.0 / (2.0 * M_PI);
+  float angle = (M_PI / STEPS) * rad2brad;
+  for (auto _ : state) {
+    float a = 0.0;
+    for (int i = 0; i < STEPS; i++) {
+      benchmark::DoNotOptimize(ftab_sin(a));
+      a += angle;
+    }
+  }
+}
+
+BENCHMARK(BM_FTabSineF);
+
+static void BM_FTabSineFInt(benchmark::State& state) {
+  const float rad2brad = 256.0 / (2.0 * M_PI);
+  float angle = (M_PI / STEPS) * rad2brad;
+  for (auto _ : state) {
+    float a = 0.0;
+    for (int i = 0; i < STEPS; i++) {
+      benchmark::DoNotOptimize(ftab_sin_int(a));
+      a += angle;
+    }
+  }
+}
+
+BENCHMARK(BM_FTabSineFInt);
+
 
 BENCHMARK_MAIN();
