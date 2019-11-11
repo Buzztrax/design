@@ -132,6 +132,19 @@ static void QM_FTabSineFInt(void) {
   error_report(&e);
 }
 
+// Arm CMSIS Full Table Sine ---------------------------------------------------
+
+static void QM_ArmSineFInt(void) {
+  float angle = (M_PI / STEPS);
+  float a = 0.0;
+  error_init(&e,  __FUNCTION__);
+  for (int i = 0; i < STEPS; i++) {
+    error_update(&e, arm_sin_f32(a), a);
+    a += angle;
+  }
+  error_report(&e);
+}
+
 
 void main(void) {
   QM_FastSineF();
@@ -139,4 +152,5 @@ void main(void) {
   QM_QTabSineF();
   QM_FTabSineF();
   QM_FTabSineFInt();
+  QM_ArmSineFInt();
 }

@@ -197,5 +197,20 @@ static void BM_FTabSineFIntDelta(benchmark::State& state) {
 
 BENCHMARK(BM_FTabSineFIntDelta);
 
+// Arm CMSIS Full Table Sine ---------------------------------------------------
+
+static void BM_ArmSineFInt(benchmark::State& state) {
+  float angle = M_PI / STEPS;
+  for (auto _ : state) {
+    float a = 0.0;
+    for (int i = 0; i < STEPS; i++) {
+      benchmark::DoNotOptimize(arm_sin_f32(a));
+      a += angle;
+    }
+  }
+}
+
+BENCHMARK(BM_ArmSineFInt);
+
 
 BENCHMARK_MAIN();
