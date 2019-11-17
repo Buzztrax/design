@@ -106,6 +106,18 @@ static void QM_QTabSineF(void) {
   error_report(&e);
 }
 
+static void QM_QTabSineFInt(void) {
+  const float rad2brad = 256.0 / (2.0 * M_PI);
+  float angle = (M_PI / STEPS);
+  float a = 0.0;
+  error_init(&e,  __FUNCTION__);
+  for (int i = 0; i < STEPS; i++) {
+    error_update(&e, qtab_sin_int(a * rad2brad), a);
+    a += angle;
+  }
+  error_report(&e);
+}
+
 // Full Table Sine -------------------------------------------------------------
 
 static void QM_FTabSineF(void) {
@@ -150,6 +162,7 @@ void main(void) {
   QM_FastSineF();
   QM_FasterSineF();
   QM_QTabSineF();
+  QM_QTabSineFInt();
   QM_FTabSineF();
   QM_FTabSineFInt();
   QM_ArmSineFInt();

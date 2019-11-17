@@ -153,6 +153,20 @@ static void BM_QTabSineF(benchmark::State& state) {
 
 BENCHMARK(BM_QTabSineF);
 
+static void BM_QTabSineFInt(benchmark::State& state) {
+  const float rad2brad = 255.0 / (2.0 * M_PI);
+  float angle = (M_PI / STEPS) * rad2brad;
+  for (auto _ : state) {
+    float a = 0.0;
+    for (int i = 0; i < STEPS; i++) {
+      benchmark::DoNotOptimize(qtab_sin_int(a));
+      a += angle;
+    }
+  }
+}
+
+BENCHMARK(BM_QTabSineFInt);
+
 // Full Table Sine -------------------------------------------------------------
 
 static void BM_FTabSineF(benchmark::State& state) {
