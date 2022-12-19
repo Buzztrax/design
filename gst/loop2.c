@@ -26,16 +26,18 @@
  * Some facts:
  * - basesrc/sink only post segment-done messages from _loop() (pull mode)
  *   - both pause the task also
+ *   - the messages get aggregated by the bin, once a segment_done message is
+ *     received
+ *   - for each previously received segment_start message, the bin sends a
+ *     segment_done message
  * - we only run the source in loop(), sink uses chain()
  * - therefore sources post segment_done events (downstream, serialized)
- * - the messages get aggregated by the bin, once a _done message is received
- *   for each previously received _start, the bin send _done
  * - especially in deep pipelines this will happend before the data actually
  *   reached the sink and should give us enough time to react
  * - now when we send the new (non-flushing seek) from sink to sources, there
  *   might be still buffers traveling downstream, those should not be
  *   interrupted
- * - src can send segment-start message and new-segment-event right away when
+ * - sources can send segment-start message and new-segment-event right away when
  *   they handle the seek, as they have been paused anyway
  *
  * - audiobasesink implements the time-sync code, gst_audio_base_sink_get_times()
@@ -85,7 +87,7 @@
  * Design:
  * - the main issue is that we wait until all sources have posted SEGMENT_DONE,
  *   the bin has matched each SEGMENT_START with a SEGMENT_DONE, posted a
- *   SEGMENT_DONE posted in turn until the pipleline got all SEGMENTS finished
+ *   SEGMENT_DONE in turn until the pipleline got all SEGMENTS finished
  *   and posts the SEGMENT_DONE message, the app has received it and sent a new
  *   SEEK event
  * - there are two variants of segmented seeks that could be done with less
